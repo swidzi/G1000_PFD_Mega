@@ -1,4 +1,4 @@
-#include <Rotary.h>
+#include <Rotary.h> //Rotary encoder library
 #include <Adafruit_MCP23017.h>  //MCP23017 library
 #include <CommonBusEncoders.h>  //Rotary Encoders on bus
 #include <Wire.h> // Generic I2C control library
@@ -60,6 +60,26 @@ Rotary Range_Enc(Range_Rotary_A, Range_Rotary_B);
 Adafruit_MCP23017 SoftKeyMCP;
 Adafruit_MCP23017 APMCP;
 Adafruit_MCP23017 FMSMCP;
+
+//MCP23017 Debouncers:
+long time = 0;         // the last time the output pin was sampled (has to be long 
+const int debounce_count = 10; // number of millis/samples to consider before declaring a debounced input
+const int mcp_active_pins = 16;  //number of pins (switches) connected to MCP23017. All are considered connected. Disconnected are handled in code, as switches are not in sequence
+
+//SoftKeyMCP
+int counterSoft[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0  };      // how many times we have seen new value - each for every pin
+int readingSoft[16];           // the current value read from the input pin - each for every pin
+int current_stateSoft[16] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH};    // the debounced input value - each for every pin
+
+//APMCP
+int counterAP[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0  };      // how many times we have seen new value - each for every pin
+int readingAP[16];           // the current value read from the input pin - each for every pin
+int current_stateAP[16] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH};    // the debounced input value - each for every pin
+
+//FMSMCP
+int counterFMS[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0  };      // how many times we have seen new value - each for every pin
+int readingFMS[16];           // the current value read from the input pin - each for every pin
+int current_stateFMS[16] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH};    // the debounced input value - each for every pin
 
 
 void setup() {
@@ -213,10 +233,135 @@ void setup() {
 
 }
 
-void PROCESS_ENCODERS() {
-
+void SEND_SERIAL() {
+// procedure to send proper message. 
+// Thinking of 2 incoming variables - calling function (1 - MCP, 2 - CommonBus, 3 - FMSMCP) and message in int form
+// For MCP the pin number with added 0 for SoftKey, 16 for AP and 32 for FMS.
+// For encoder the encoder code (100-1450)
   
 }
+
+
+
+
+void PROCESS_ENCODERS() {
+// Proces common bus encoders
+
+// Proces stand alone encoder
+  
+}
+
+
+void MCP23017_DEBOUNCER() {
+
+
+
+  if(millis() != time) //Reduce number of comparissons to once per millisecond
+  {
+    //Check the SoftKeyMCP
+    for(int i = 0; i < mcp_active_pins ; i++) //iterate via all pin ports
+    {
+      if(i == 1 || i == 14) { //For SoftKey MCP if pin is 1 or 14 do not read pin, there is no button attached
+        continue;
+      }
+      
+      readingSoft[i] = SoftKeyMCP.digitalRead(i); //read port
+  
+      if(readingSoft[i] == current_stateSoft[i] && counterSoft[i] > 0) //if value has "bounced" reduce count number
+      {
+        counterSoft[i]--;
+      }
+      if(readingSoft[i] != current_stateSoft[i]) //if value is "held" add counter
+      {
+         counterSoft[i]++; 
+      }
+      // If the Input has shown the same value for long enough let's switch it
+      if(counterSoft[i] >= debounce_count)
+      {
+        counterSoft[i] = 0;  //clear counter
+        
+        //Execute proper action here. RealSimGear requires action both on HIGH and LOW.
+      
+      }
+      current_stateSoft[i] = readingSoft[i]; //update current state
+    }
+
+    //Check the APMCP, if it is activated
+    if(IsAPPanelActive == 1) {
+      for(int i = 0; i < mcp_active_pins ; i++) //iterate via all pin ports
+      {
+        if(i == 0 || i == 1 || i == 14 || i == 15) { //For AP MCP if pin is 0, 1, 14 or 15 do not read pin, there is no button attached
+          continue;
+        }
+        
+        readingSoft[i] = APMCP.digitalRead(i); //read port
+    
+        if(readingAP[i] == current_stateAP[i] && counterAP[i] > 0) //if value has "bounced" reduce count number
+        {
+          counterAP[i]--;
+        }
+        if(readingAP[i] != current_stateAP[i]) //if value is "held" add counter
+        {
+           counterAP[i]++; 
+        }
+        // If the Input has shown the same value for long enough let's switch it
+        if(counterAP[i] >= debounce_count)
+        {
+          counterAP[i] = 0;  //clear counter
+          
+          //Execute proper action here. RealSimGear requires action both on HIGH and LOW.
+        
+        }
+        current_stateAP[i] = readingAP[i]; //update current state
+      }
+    }
+        //Check the FMSMCP
+    for(int i = 0; i < mcp_active_pins ; i++) //iterate via all pin ports
+    {
+      if(i == 0 || i == 1 || i == 2 || i == 3 || i == 10) { //For FMS MCP if pin is 0 to 3 or 10 do not read pin, there is no button attached
+        continue;
+      }
+      
+      readingFMS[i] = FMSMCP.digitalRead(i); //read port
+  
+      if(readingFMS[i] == current_stateFMS[i] && counterFMS[i] > 0) //if value has "bounced" reduce count number
+      {
+        counterFMS[i]--;
+      }
+      if(readingFMS[i] != current_stateFMS[i]) //if value is "held" add counter
+      {
+         counterFMS[i]++; 
+      }
+      // If the Input has shown the same value for long enough let's switch it
+      if(counterFMS[i] >= debounce_count)
+      {
+        counterFMS[i] = 0;  //clear counter
+        
+        //Execute proper action here. RealSimGear requires action both on HIGH and LOW.
+      
+      }
+      current_stateFMS[i] = readingFMS[i]; //update current state
+    }
+  
+    time = millis(); //update timer
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+}
+  
 
 
 void loop() {
@@ -225,7 +370,7 @@ void loop() {
   // keep alive for RSG connection
   if(millis() % 1000 == 0)
     Serial.write("\\####RealSimGear#RealSimGear-G1000XFD#1#3.1.9#656E6B776FA39/\n"); // 3.1.9 = latest firmware; 756E6B776Fd39 = RANDOM ID
-
+  
   PROCESS_ENCODERS();
-
+  MCP23017_DEBOUNCER();
 }
