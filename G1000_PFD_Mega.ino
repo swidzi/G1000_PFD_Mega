@@ -2,6 +2,7 @@
 #include <Adafruit_MCP23017.h>  //MCP23017 library
 #include <CommonBusEncoders.h>  //Rotary Encoders on bus
 #include <Wire.h> // Generic I2C control library
+#include <avr/pgmspace.h> // Library allowing for storing constants in progmem
 
 // Declarations:
 const byte IsPFD = 1; //If IsPFD is 1 then all functionalities of the sketch deal with left screen - PFD. Else = MFD
@@ -80,6 +81,12 @@ int current_stateAP[16] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH,
 int counterFMS[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0  };      // how many times we have seen new value - each for every pin
 int readingFMS[16];           // the current value read from the input pin - each for every pin
 int current_stateFMS[16] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH};    // the debounced input value - each for every pin
+
+
+//Array storing all possible G1000 messages in a char* array (array of strings). Array has to be stored in progmem to reduce the RAM footprint
+
+
+
 
 
 void setup() {
@@ -256,7 +263,8 @@ void MCP23017_DEBOUNCER() {
 
 
 
-  if(millis() != time) //Reduce number of comparissons to once per millisecond
+  //if(millis() != time) //Reduce number of comparissons to once per millisecond
+  if(micros() % 1000 == 0 ) //Do a comparison once per millisecond (every 1000 microseconds)
   {
     //Check the SoftKeyMCP
     for(int i = 0; i < mcp_active_pins ; i++) //iterate via all pin ports
@@ -343,7 +351,7 @@ void MCP23017_DEBOUNCER() {
       current_stateFMS[i] = readingFMS[i]; //update current state
     }
   
-    time = millis(); //update timer
+    //time = millis(); //update timer
   }
 
 
