@@ -343,7 +343,7 @@ void setup() {
 
 void SEND_SERIAL(int Calling, int Message) {
 // procedure to send proper message. 
-// Thinking of 2 incoming variables - calling function (1 - MCP ON, 2 - MCP OFF, 3 - CommonBus, 4 - FMSMCP, 5 - Range Enc) and message in int form
+// Thinking of 2 incoming variables - calling function (1 - MCP ON, 2 - MCP OFF, 3 - CommonBus, 4 - Range Enc) and message in int form
 // For MCP the pin number with added 0 for SoftKey, 16 for AP and 32 for FMS.
 // For encoder the encoder code (100-1450)
 
@@ -361,12 +361,34 @@ switch (Calling) {
     Serial.write("=0\n");
   break;
   case 3:
-    
+    //Find type of message - Inc = 0, Dec = 1, Sw = 50
+    int Type = Message % 100;
+    //Find encoder
+    int Encod = Message / 100;
+    //Lookup the proper
+    switch (Type) {
+      case 0: //Inc
+    //Lookup the proper message from array
+    Serial.write(Encoder_Commands_Inc[Message]);
+    //send newline symbol
+    Serial.write("\n");        
+      break;
+      case 1: //Dec
+    //Lookup the proper message from array
+    Serial.write(Encoder_Commands_Dec[Message]);
+    //send newline symbol
+    Serial.write("\n");      
+      break; //Sw
+      case 50:
+    //Lookup the proper message from array
+    Serial.write(Encoder_Commands_Sw[Message]);
+    //send newline symbol
+    Serial.write("\n");    
+      break;
+    }
   break;
   case 4:
-  
-  break;
-  case 5:
+  // send messages from encoder
   
   break;
 }
@@ -377,11 +399,16 @@ switch (Calling) {
 
 
 void PROCESS_ENCODERS() {
-// Proces common bus encoders
-int EncRead = encoders.readAll();
-
-// Proces stand alone encoder
-  
+  // Proces common bus encoders
+  int EncRead = encoders.readAll();
+  if (EncRead != 0) {
+    SEND_SERIAL(3, EncRead);
+  }
+  // Proces stand alone encoder
+  int Result = Range_Enc.process();
+  if(Result != 0 ) {
+    SEND_SERIAL(4, Result);
+  }
 }
 
 
