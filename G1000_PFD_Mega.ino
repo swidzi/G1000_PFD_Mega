@@ -5,7 +5,6 @@
 #include <avr/pgmspace.h> // Library allowing for storing constants in progmem
 
 // Declarations:
-const byte IsPFD = 1; //If IsPFD is 1 then all functionalities of the sketch deal with left screen - PFD. Else = MFD
 const byte IsAPPanelActive = 1; //If this constant is 1 the AP keyboard is on and IC3 is populated and I/O is set for Input with pull_up resistor on. Else IC3 is unpopulated and not connected via I2C
 
 //Pins:
@@ -83,8 +82,110 @@ int readingFMS[16];           // the current value read from the input pin - eac
 int current_stateFMS[16] = {HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH, HIGH};    // the debounced input value - each for every pin
 
 
-//Array storing all possible G1000 messages in a char* array (array of strings). Array has to be stored in progmem to reduce the RAM footprint
+//Arrays storing all possible G1000 messages in a char* array (array of strings). Array has to be stored in progmem to reduce the RAM footprint
+const char* Button_Commands[] = { 
+  "BTN_NAV_FF",
+  "",
+  "BTN_SOFT_7",
+  "BTN_SOFT_8",
+  "BTN_SOFT_9",
+  "BTN_SOFT_10",
+  "BTN_SOFT_11",
+  "BTN_SOFT_12",
+  "BTN_SOFT_6",
+  "BTN_SOFT_5",
+  "BTN_SOFT_4",
+  "BTN_SOFT_3",
+  "BTN_SOFT_2",
+  "BTN_SOFT_1",
+  "",
+  "BTN_COM_FF",
+  "",
+  "",
+  "BTN_FLC",
+  "BTN_VS",
+  "BTN_APR",
+  "BTN_NAV",
+  "BTN_HDG",
+  "BTN_AP",
+  "BTN_ALT",
+  "BTN_VNAV",
+  "BTN_BC",
+  "BTN_NOSE_UP",
+  "BTN_NOSE_DN",
+  "BTN_FD",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "BTN_MENU",
+  "BTN_DIRECT",
+  "BTN_ENT",
+  "BTN_PROC",
+  "BTN_FPL",
+  "BTN_CLR",
+  "",
+  "BTN_PAN_UP",
+  "BTN_PAN_SYNC",
+  "BTN_PAN_RIGHT",
+  "BTN_PAN_LEFT",
+  "BTN_PAN_DN",
+};
 
+const char* Encoder_Commands_Inc[] = { 
+"ENC_NAV_VOL_UP",
+"ENC_NAV_OUTER_UP",
+"ENC_NAV_INNER_UP",
+"ENC_HDG_UP",
+"ENC_ALT_OUTER_UP",
+"ENC_ALT_INNER_UP",
+"ENC_COM_VOL_UP",
+"ENC_COM_OUTER_UP",
+"ENC_COM_INNER_UP",
+"ENC_BARO_UP",
+"ENC_CRS_UP",
+"ENC_FMS_INNER_UP",
+"ENC_FMS_OUTER_UP",
+"ENC_RANGE_UP"
+
+};
+
+const char* Encoder_Commands_Dec[] = { 
+"ENC_NAV_VOL_DN",
+"ENC_NAV_OUTER_DN",
+"ENC_NAV_INNER_DN",
+"ENC_HDG_DN",
+"ENC_ALT_OUTER_DN",
+"ENC_ALT_INNER_DN",
+"ENC_COM_VOL_DN",
+"ENC_COM_OUTER_DN",
+"ENC_COM_INNER_DN",
+"ENC_BARO_DN",
+"ENC_CRS_DN",
+"ENC_FMS_INNER_DN",
+"ENC_FMS_OUTER_DN",
+"ENC_RANGE_DN"
+
+};
+
+const char* Encoder_Commands_Sw[] = { 
+"BTN_NAV_VOL",
+"BTN_NAV_TOG",
+"",
+"BTN_HDG_SYNC",
+"BTN_ALT_SYNC",
+"",
+"BTN_COM_VOL",
+"BTN_COM_TOG",
+"",
+"BTN_CRS_SYNC",
+"",
+"BTN_FMS",
+"",
+
+};
 
 
 
@@ -240,12 +341,36 @@ void setup() {
 
 }
 
-void SEND_SERIAL() {
+void SEND_SERIAL(int Calling, int Message) {
 // procedure to send proper message. 
-// Thinking of 2 incoming variables - calling function (1 - MCP, 2 - CommonBus, 3 - FMSMCP) and message in int form
+// Thinking of 2 incoming variables - calling function (1 - MCP ON, 2 - MCP OFF, 3 - CommonBus, 4 - FMSMCP, 5 - Range Enc) and message in int form
 // For MCP the pin number with added 0 for SoftKey, 16 for AP and 32 for FMS.
 // For encoder the encoder code (100-1450)
+
+switch (Calling) {
+  case 1:
+    //Lookup the proper message from array
+    Serial.write(Button_Commands[Message]);
+    //send ON signal and an newline symbol
+    Serial.write("=1\n");
+  break;
+  case 2:
+    //Lookup the proper message from array
+    Serial.write(Button_Commands[Message]);
+    //send OFF signal and an newline symbol
+    Serial.write("=0\n");
+  break;
+  case 3:
+    
+  break;
+  case 4:
   
+  break;
+  case 5:
+  
+  break;
+}
+
 }
 
 
@@ -253,6 +378,7 @@ void SEND_SERIAL() {
 
 void PROCESS_ENCODERS() {
 // Proces common bus encoders
+int EncRead = encoders.readAll();
 
 // Proces stand alone encoder
   
@@ -289,7 +415,7 @@ void MCP23017_DEBOUNCER() {
         counterSoft[i] = 0;  //clear counter
         
         //Execute proper action here. RealSimGear requires action both on HIGH and LOW.
-      
+        SEND_SERIAL(1, i);     
       }
       current_stateSoft[i] = readingSoft[i]; //update current state
     }
@@ -318,7 +444,7 @@ void MCP23017_DEBOUNCER() {
           counterAP[i] = 0;  //clear counter
           
           //Execute proper action here. RealSimGear requires action both on HIGH and LOW.
-        
+        SEND_SERIAL(1, i + 16);
         }
         current_stateAP[i] = readingAP[i]; //update current state
       }
@@ -346,28 +472,14 @@ void MCP23017_DEBOUNCER() {
         counterFMS[i] = 0;  //clear counter
         
         //Execute proper action here. RealSimGear requires action both on HIGH and LOW.
-      
+        SEND_SERIAL(1, i + 32);
       }
       current_stateFMS[i] = readingFMS[i]; //update current state
     }
   
     //time = millis(); //update timer
   }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
+   
 }
   
 
