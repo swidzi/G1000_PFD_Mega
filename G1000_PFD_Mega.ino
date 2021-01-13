@@ -389,7 +389,14 @@ switch (Calling) {
   break;
   case 4:
   // send messages from encoder
-  
+  //no sure if I understand correctly, by DIR_CW == 0x10 and DIR_CCW == 0x20. I need to test it
+  if (Message == 0x10) {
+    Serial.write("ENC_RANGE_UP\n"); //If rotating right Range goes up
+  }
+  if (Message == 0x20) {
+    Serial.write("ENC_RANGE_DN\n"); //If rotating left range goes down
+  }
+ 
   break;
 }
 
