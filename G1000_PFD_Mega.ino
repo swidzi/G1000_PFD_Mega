@@ -3,6 +3,8 @@
 #include <CommonBusEncoders.h>  //Rotary Encoders on bus
 #include <Wire.h> // Generic I2C control library
 #include <avr/pgmspace.h> // Library allowing for storing constants in progmem
+#include <Bounce2.h> //Library for using a debounced switch
+
 
 // Declarations:
 const byte IsAPPanelActive = 1; //If this constant is 1 the AP keyboard is on and IC3 is populated and I/O is set for Input with pull_up resistor on. Else IC3 is unpopulated and not connected via I2C
@@ -35,11 +37,9 @@ const int Backlight_Pin = A5;
 const int Range_Rotary_A = A6;
 const int Range_Rotary_B = A7;
 
-
-
-
-//Autopilot Switches
-
+//Debounced switch for backlight transistor
+const int Backlight_Sw_Pin = A8; 
+const int Backlight_Tr_Pin = A5; 
 
 //MCP Addresses:
 const uint8_t SoftKeyMCP_Addr = 0;
