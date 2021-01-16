@@ -531,13 +531,6 @@ void MCP23017_DEBOUNCER() {
 }
   
 
-void SERIAL_READ() {
-  while(Serial.available()) {
-    
-  }
-  
-}
-
 
 
 void loop() {
@@ -549,9 +542,7 @@ void loop() {
   
   PROCESS_ENCODERS();
   MCP23017_DEBOUNCER();
-  if (Serial.available() > 0 ) {
-    SERIAL_READ();
-  }
+
   // Update backlight switch status
   Backlight.update();
   if (Backlight.fell()) {
