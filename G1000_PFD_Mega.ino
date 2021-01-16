@@ -39,7 +39,6 @@ const int Range_Rotary_B = A7;
 
 //Debounced switch for backlight transistor
 const int Backlight_Sw_Pin = A8; 
-const int Backlight_Tr_Pin = A5; 
 
 //MCP Addresses:
 const uint8_t SoftKeyMCP_Addr = 0;
@@ -55,6 +54,10 @@ CommonBusEncoders encoders(EncBusAPin, EncBusBPin, EncBusSwPin, 14);  // 14 = nu
 
 //Standalone range encoder
 Rotary Range_Enc(Range_Rotary_A, Range_Rotary_B);
+
+//Switch for Backlight
+Bounce Backlight = Bounce();
+
 
 //MCP23017 declaraions
 Adafruit_MCP23017 SoftKeyMCP;
@@ -219,6 +222,17 @@ void setup() {
       encoders.addEncoder(i + 1, 4, Encoder_Pin_Numbers[i], 1, (i * 100) + 100, (i* 100) + 150); // Each encoder has a code equal 100 multiplied by encoder number.
     
   }
+
+  // Initialize Bounce button for Backlight
+  // Set pin mode
+  pinMode(Backlight_Sw_Pin, INPUT_PULLUP);
+  pinMode(Backlight_Pin, OUTPUT);
+  //set transistor off
+  digitalWrite(Backlight_Pin, LOW);
+  Backlight.attach(Backlight_Sw_Pin);
+  Backlight.interval(25);
+  
+  
 
   // Initialize MCP23017
   SoftKeyMCP.begin(SoftKeyMCP_Addr);
@@ -517,6 +531,14 @@ void MCP23017_DEBOUNCER() {
 }
   
 
+void SERIAL_READ() {
+  while(Serial.available()) {
+    
+  }
+  
+}
+
+
 
 void loop() {
 
@@ -527,4 +549,18 @@ void loop() {
   
   PROCESS_ENCODERS();
   MCP23017_DEBOUNCER();
+  if (Serial.available() > 0 ) {
+    SERIAL_READ();
+  }
+  // Update backlight switch status
+  Backlight.update();
+  if (Backlight.fell()) {
+    //if backlight switch is 0, switch off the transistor (backlight)
+    digitalWrite(Backlight_Pin, LOW);
+  }
+  if (Backlight.rose()) {
+    //if backlight switch is 1, switch on the transistor (backlight)
+    digitalWrite(Backlight_Pin, HIGH);    
+  }
+  
 }
