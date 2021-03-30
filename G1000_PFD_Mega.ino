@@ -1,3 +1,7 @@
+
+
+
+
 /*
     PFD/MFD Arduino Mega Firmware using RealSimGear Flight Simmulator Plugin
     Copyright (C) 2021  Wojciech Swidzinski
@@ -18,19 +22,23 @@
 
 
 // Libraries
-#include <Rotary.h> //Rotary encoder library
 #include <Adafruit_MCP23017.h>  //MCP23017 library
 #include <CommonBusEncoders.h>  //Rotary Encoders on bus
 #include <Wire.h> // Generic I2C control library
 //#include <avr/pgmspace.h> // Library allowing for storing constants in progmem
 #include <Bounce2.h> //Library for using a debounced switch
+#include <Encoder.h>
 
 
 // Declarations:
 const byte IsAPPanelActive = 1; //If this constant is 1 the AP keyboard is on and IC3 is populated and I/O is set for Input with pull_up resistor on. Else IC3 is unpopulated and not connected via I2C
 const int MCP_Update_Time = 50; // Check the MCPs every 50ms
+const int SYNC_Send_Time = 100;
 const int RSG_Keep_Alive = 1000; // Send keep alive message every second
 long Last_Keep_Alive = 0; // to store last keep alive time
+long SYNC_Triggered_Time = 0;
+bool Send_SYNC = false;
+bool Was_UP_Triggered = false;
 //Pins:
 //Encoders
 
@@ -73,7 +81,8 @@ const uint8_t FMSMCP_Addr = 2;
 CommonBusEncoders encoders(EncBusAPin, EncBusBPin, EncBusSwPin, 13);  // 13 = number of encoders
 
 //Standalone range encoder
-Rotary Range_Enc(Range_Rotary_A, Range_Rotary_B);
+Encoder myEnc(Range_Rotary_A, Range_Rotary_B);
+int oldPosition = 0;
 
 //Switch for Backlight
 Bounce Backlight = Bounce();
@@ -160,8 +169,8 @@ const char* Button_Commands[] = {
   "BTN_FPL",
   "BTN_CLR",
   "",
-  "BTN_PAN_UP",
   "BTN_PAN_SYNC",
+  "BTN_PAN_UP",
   "BTN_PAN_RIGHT",
   "BTN_PAN_LEFT",
   "BTN_PAN_DN",
@@ -300,6 +309,10 @@ void setup() {
   // Set pin mode
   pinMode(Backlight_Sw_Pin, INPUT_PULLUP);
   pinMode(Backlight_Pin, OUTPUT);
+  pinMode(Range_Rotary_B, INPUT_PULLUP);
+  pinMode(Range_Rotary_A, INPUT_PULLUP);
+
+
   //set transistor off
   digitalWrite(Backlight_Pin, LOW);
   Backlight.attach(Backlight_Sw_Pin);
@@ -428,69 +441,112 @@ void SEND_SERIAL(int Calling, int Message) {
   // Thinking of 2 incoming variables - calling function (1 - MCP ON, 2 - MCP OFF, 3 - CommonBus, 4 - Range Enc) and message in int form
   // For MCP the pin number with added 0 for SoftKey, 16 for AP and 32 for FMS.
   // For encoder the encoder code (100-1450)
+
+
   switch (Calling) {
     case 1:
-      //Lookup the proper message from array
-      Serial.write(Button_Commands[Message]);
-      //send ON signal and an newline symbol
-      Serial.write("=1\n");
+      {
+        //Lookup the proper message from array
+
+        Serial.write(Button_Commands[Message]);
+        //send ON signal and an newline symbol
+        Serial.write("=1\n");
+      }
       break;
+
     case 2:
-      //Lookup the proper message from array
-      Serial.write(Button_Commands[Message]);
-      //send OFF signal and an newline symbol
-      Serial.write("=0\n");
+      {
+        //Lookup the proper message from array
+        Serial.write(Button_Commands[Message]);
+        //send OFF signal and an newline symbol
+        Serial.write("=0\n");
+      }
       break;
     case 3:
-      //Find type of message - Inc = 0, Dec = 1, Sw = 50
-      int Type = Message % 100;
-      //Find encoder
-      int Encod = Message / 100;
-      Encod = Encod - 1; // Messages are 0 indexed.
-      // Check if encoder is CW for Inc
-      if ( (Is_Clockwise_Inc[Encod] == false ) && (Type == 0)) {
-        Type = 1;
-      }
-      if ( (Is_Clockwise_Inc[Encod] == false ) && (Type == 1)) {
-        Type = 0;
-      }
-      //Lookup the proper
-      switch (Type) {
-        case 0: //Inc
-          //Lookup the proper message from array
-          Serial.write(Encoder_Commands_Inc[Encod]);
-          //send newline symbol
-          Serial.write("\n");
-          break;
-        case 1: //Dec
-          //Lookup the proper message from array
-          Serial.write(Encoder_Commands_Dec[Encod]);
-          //send newline symbol
-          Serial.write("\n");
-          break; //Sw
-        case 50:
-          //Lookup the proper message from array
-          Serial.write(Encoder_Commands_Sw[Encod]);
-          //send newline symbol
-          Serial.write("\n");
-          break;
+      {
+        //Find type of message - Inc = 0, Dec = 1, Sw = 50
+        int Type = Message % 100;
+        //Find encoder
+        int Encod = Message / 100;
+        Encod = Encod - 1; // Messages are 0 indexed.
+        // Check if encoder is CW for Inc
+        if ( (Is_Clockwise_Inc[Encod] == false ) && (Type == 1)) {
+          Type = 0; // if it is CCW for Inc flip it
+        }
+        else if  ( (Is_Clockwise_Inc[Encod] == false ) && (Type == 0))
+        {
+          Type = 1; // if it is CCW for Inc flip it
+        }
+        //      //Lookup the proper
+        //      if (Type == 0) {
+        //        //Lookup the proper message from array
+        //        Serial.write(Encoder_Commands_Inc[Encod]);
+        //        //send newline symbol
+        //        Serial.write("\n");
+        //
+        //
+        //
+        //      }
+        //      else if ( Type == 1) {
+        //        //Lookup the proper message from array
+        //        Serial.write(Encoder_Commands_Dec[Encod]);
+        //        //send newline symbol
+        //        Serial.write("\n");
+        //
+        //
+        //
+        //      }
+        //
+        //      else if (Type == 50) {
+        //        //Lookup the proper message from array
+        //        Serial.write(Encoder_Commands_Sw[Encod]);
+        //        //send newline symbol
+        //        Serial.write("\n");
+        //
+        //
+        //
+        //      }
+        switch (Type) {
+          case 0: //Inc
+            //Lookup the proper message from array
+            Serial.write(Encoder_Commands_Inc[Encod]);
+            //send newline symbol
+            Serial.write("\n");
+            break;
+          case 1: //Dec
+            //Lookup the proper message from array
+            Serial.write(Encoder_Commands_Dec[Encod]);
+            //send newline symbol
+            Serial.write("\n");
+            break; //Sw
+          case 50:
+            //Lookup the proper message from array
+            Serial.write(Encoder_Commands_Sw[Encod]);
+            //send newline symbol
+            Serial.write("\n");
+
+            break;
+        }
       }
       break;
     case 4:
-      // send messages from encoder
-      //no sure if I understand correctly, by DIR_CW == 0x10 and DIR_CCW == 0x20. I need to test it
-      if (Message == 0x10) {
-        Serial.write("ENC_RANGE_UP\n"); //If rotating right Range goes up
-      }
-      if (Message == 0x20) {
-        Serial.write("ENC_RANGE_DN\n"); //If rotating left range goes down
+      {
+        // send messages from encoder
+        if (Message < 0) {
+          Serial.write("ENC_RANGE_UP\n"); //If rotating right Range goes up
+        }
+        if (Message > 0) {
+          Serial.write("ENC_RANGE_DN\n"); //If rotating left range goes down
+        }
       }
       break;
+
   }
 }
 
 void PROCESS_ENCODERS() {
   // Proces common bus encoders
+  static int pos = 0;
   int EncRead = encoders.readAll();
 
   if (EncRead > 0) {
@@ -498,15 +554,16 @@ void PROCESS_ENCODERS() {
   }
 
   // Proces stand alone encoder
-  int Result = Range_Enc.process();
-  if (Result > 0 ) {
-    SEND_SERIAL(4, Result);
+  int newPosition = myEnc.read(); //Get the new position of the encoder
+  if (newPosition != oldPosition) { //if it changed do something with it.
+    SEND_SERIAL(4, newPosition); // Send to Plugin
+    newPosition = newPosition + (newPosition * -1); // set the newPosition back to 0
+    myEnc.write(newPosition); // and write it back to encoder library
+    oldPosition = newPosition; // also make sure that old postion is updated
   }
 }
 
 void BUTTONS() {
-
-
   // SoftKey MCP
   for (int i = 0; i < 16 ; i++) //iterate via all pin ports
   {
@@ -524,7 +581,6 @@ void BUTTONS() {
       }
     }
   }
-
   // AP MCP
   if (IsAPPanelActive == 1) { // Only check for AP MCP if the AP panel is activated
     for (int i = 0; i < 16 ; i++) //iterate via all pin ports
@@ -544,7 +600,6 @@ void BUTTONS() {
       }
     }
   }
-
   //FMS MCP
   for (int i = 0; i < 16 ; i++) //iterate via all pin ports
   {
@@ -553,11 +608,16 @@ void BUTTONS() {
     }
     NewValuesFMS[i] = FMSMCP.digitalRead(i); //Read the pin
     if (NewValuesFMS[i] != OldValuesFMS[i]) { // On change of pin
-      
-      
-
-      
       OldValuesFMS[i] = NewValuesFMS[i]; // Update pin list
+      if (i == 11) {       //Check if this is BTN_PAN_SYNC pin
+        SYNC_Triggered_Time = millis(); //mark the time
+        Send_SYNC = true; //Mark "Send SYNC" flag,
+        continue; //and Skip to next for
+      }
+      // If there is one of the direction pins reset the "Send SYNC" flag
+      if (i == 12 | i == 13 || i == 14 || i == 15) {
+        Send_SYNC = false; //Do not want to send SYNC together with PAN
+      }
       if (NewValuesFMS[i] == 1) {
         SEND_SERIAL(2, i + 32); //on change to high, release button. Add 32 to find proper message.
       }
@@ -566,6 +626,13 @@ void BUTTONS() {
       }
     }
   }
+
+  // Process sending the BTN_PAN_SYNC. I want to send it only if there was no direction pins for at least some time (100ms default)
+  if ( (millis() > (SYNC_Triggered_Time + SYNC_Send_Time)) && (Send_SYNC == true)) {
+    SEND_SERIAL((NewValuesFMS[11] + 1), 43); //Send
+    Send_SYNC = false;
+  }
+
 
 }
 
@@ -594,6 +661,8 @@ void loop() {
   {
     BUTTONS();
   }
+
+
 
 
   // Update backlight switch status
