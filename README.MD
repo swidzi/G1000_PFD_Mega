@@ -3,9 +3,9 @@
 Requirements:
 
 * Arduino Mega 2560
-* Rotary encoder library (Installed via Arduino library)
-* Adafruit_MCP23017 library (https://github.com/adafruit/Adafruit-MCP23017-Arduino-Library)
-* CommonBusEncoders library (https://github.com/j-bellavance/CommonBusEncoders)
+* Rotary encoder library (Installed via Arduino library) - more details [here](http://www.mathertel.de/Arduino/RotaryEncoderLibrary.aspx)
+* [Adafruit_MCP23017 library](https://github.com/adafruit/Adafruit-MCP23017-Arduino-Library)
+* [CommonBusEncoders library](https://github.com/j-bellavance/CommonBusEncoders)
 * Wire - Generic I2C control library
 My Arduino breakout board/shield (can be modified to work in different configuration)
 
