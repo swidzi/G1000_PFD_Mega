@@ -1,7 +1,3 @@
-
-
-
-
 /*
     PFD/MFD Arduino Mega Firmware using RealSimGear Flight Simmulator Plugin
     Copyright (C) 2021  Wojciech Swidzinski
@@ -20,29 +16,41 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-
 // Libraries
 #include <Adafruit_MCP23017.h>  //MCP23017 library
 #include <CommonBusEncoders.h>  //Rotary Encoders on bus
 #include <Wire.h> // Generic I2C control library
-//#include <avr/pgmspace.h> // Library allowing for storing constants in progmem
 #include <Bounce2.h> //Library for using a debounced switch
-#include <Encoder.h>
+#include <Encoder.h> //Rotary Encoder library
 
-
-// Declarations:
+// Panel settings:
 const byte IsAPPanelActive = 1; //If this constant is 1 the AP keyboard is on and IC3 is populated and I/O is set for Input with pull_up resistor on. Else IC3 is unpopulated and not connected via I2C
 const int MCP_Update_Time = 50; // Check the MCPs every 50ms
 const int SYNC_Send_Time = 100;
 const int RSG_Keep_Alive = 1000; // Send keep alive message every second
-long Last_Keep_Alive = 0; // to store last keep alive time
-long SYNC_Triggered_Time = 0;
-bool Send_SYNC = false;
-bool Was_UP_Triggered = false;
-//Pins:
-//Encoders
+// Are encoders flipped (Inside with outside):
+bool Is_NAV_flipped = true;
+bool Is_ALT_flipped = false;
+bool Is_COM_flipped = false;
+bool Is_CRS_flipped = false;
+bool Is_FMS_flipped = false;
 
-//Common bus
+// Is clockwise turn (even) increasing value. (Encoders are in order of the commands array. If you flipped encoders remember to "flip" them here as well).
+const bool Is_Clockwise_Inc[] = {
+  true, true, true, true,
+  true, true, true, true,
+  true, true, true, true,
+  true, true, true, true
+};
+
+// Declarations:
+//MCP Addresses:
+const uint8_t SoftKeyMCP_Addr = 0;
+const uint8_t APMCP_Addr = 1;
+const uint8_t FMSMCP_Addr = 2;
+
+//Pins:
+//Common bus encoders
 const int EncBusAPin = 17;
 const int EncBusBPin = 18;
 const int EncBusSwPin = 19;
@@ -60,20 +68,16 @@ const int Enc_CRS_In_Pin = 43;
 const int Enc_FMS_Out_Pin = 45;
 const int Enc_FMS_In_Pin = 47;
 
-//Backlight
-const int Backlight_Pin = A5;
-
 //Joystick encoder
 const int Range_Rotary_A = A6;
 const int Range_Rotary_B = A7;
 
+//Backlight
+const int Backlight_Pin = A5;
+
 //Debounced switch for backlight transistor
 const int Backlight_Sw_Pin = A8;
 
-//MCP Addresses:
-const uint8_t SoftKeyMCP_Addr = 0;
-const uint8_t APMCP_Addr = 1;
-const uint8_t FMSMCP_Addr = 2;
 
 //Object declarations:
 //Common bus encoders
@@ -82,18 +86,18 @@ CommonBusEncoders encoders(EncBusAPin, EncBusBPin, EncBusSwPin, 13);  // 13 = nu
 
 //Standalone range encoder
 Encoder myEnc(Range_Rotary_A, Range_Rotary_B);
-int oldPosition = 0;
 
 //Switch for Backlight
 Bounce Backlight = Bounce();
-
 
 //MCP23017 declaraions
 Adafruit_MCP23017 SoftKeyMCP;
 Adafruit_MCP23017 APMCP;
 Adafruit_MCP23017 FMSMCP;
 
-//SoftkeyMCP
+
+//Variable declarations:
+//SoftkeyMCP state storing
 byte OldValuesSoft[] = { 0, 0, 0, 0, 0, 0,
                          0, 0, 0, 0, 0, 0,
                          0, 0, 0, 0
@@ -102,7 +106,7 @@ byte NewValuesSoft[] = { 0, 0, 0, 0, 0, 0,
                          0, 0, 0, 0, 0, 0,
                          0, 0, 0, 0
                        };
-
+//Autopilot MCP state storing
 byte OldValuesAP[] = { 0, 0, 0, 0, 0, 0,
                        0, 0, 0, 0, 0, 0,
                        0, 0, 0, 0
@@ -111,7 +115,7 @@ byte NewValuesAP[] = { 0, 0, 0, 0, 0, 0,
                        0, 0, 0, 0, 0, 0,
                        0, 0, 0, 0
                      };
-
+//FMS MCP state storing
 byte OldValuesFMS[] = { 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0
@@ -122,7 +126,10 @@ byte NewValuesFMS[] = { 0, 0, 0, 0, 0, 0,
                       };
 
 
-
+long Last_Keep_Alive = 0; // to store last keep alive time
+long SYNC_Triggered_Time = 0;  //used to store last time SYNC button was triggered
+bool Send_SYNC = false; // flag to send SYNC
+int oldPosition = 0; // variable to store last position of the encoder. Used to determine CW or CCW rotation.
 
 //Arrays storing all possible G1000 messages in a char* array (array of strings). Array has to be stored in progmem to reduce the RAM footprint
 const char* Button_Commands[] = {
@@ -229,24 +236,6 @@ const char* Encoder_Commands_Sw[] = {
 
 };
 
-
-// Are encoders flipped:
-bool Is_NAV_flipped = true;
-bool Is_ALT_flipped = false;
-bool Is_COM_flipped = false;
-bool Is_CRS_flipped = false;
-bool Is_FMS_flipped = false;
-
-// Is clockwise turn (even) increasing value. (Encoders are in order of the commands array. If you flipped encoders remember to "flip" them here as well).
-const bool Is_Clockwise_Inc[] = {
-  true, true, true, true,
-  true, true, true, true,
-  true, true, true, true,
-  true, true, true, true
-};
-
-
-
 void setup() {
   // start serial connection
   Serial.begin(115200); while (!Serial);
@@ -273,7 +262,7 @@ void setup() {
     Enc_FMS_Out_Pin,
     Enc_FMS_In_Pin
   } ;
-
+  // Make sure that order of encoders matches the encoder type
   if (Is_NAV_flipped == true) {
 
     Encoder_Pin_Numbers[1] = Enc_NAV_In_Pin;
@@ -300,13 +289,14 @@ void setup() {
     Encoder_Pin_Numbers[12] = Enc_FMS_Out_Pin;
 
   }
-
+  // Create encoder objects
   for (int i = 0; i < 13; i++) {
     encoders.addEncoder(i + 1, 4, Encoder_Pin_Numbers[i], 1, ((i * 100) + 100), ((i * 100) + 150)); // Each encoder has a code equal 100 multiplied by encoder number.
   }
 
   // Initialize Bounce button for Backlight
   // Set pin mode
+  // NOT TESTED:
   pinMode(Backlight_Sw_Pin, INPUT_PULLUP);
   pinMode(Backlight_Pin, OUTPUT);
   pinMode(Range_Rotary_B, INPUT_PULLUP);
@@ -314,6 +304,7 @@ void setup() {
 
 
   //set transistor off
+  //NOT TESTED:
   digitalWrite(Backlight_Pin, LOW);
   Backlight.attach(Backlight_Sw_Pin);
   Backlight.interval(25);
@@ -326,7 +317,6 @@ void setup() {
   if (IsAPPanelActive == 1) {
     APMCP.begin(APMCP_Addr) ;
   }; //If AP panel is inactive, do not initialize MCP
-
 
   //set pinMode and pullups for MCP. Set unused pins for output to reduce noise
   //SoftKeyMCP:
@@ -432,29 +422,26 @@ void setup() {
     APMCP.pullUp(7, HIGH);
   }
 
-
-
 }
 
 void SEND_SERIAL(int Calling, int Message) {
-  // procedure to send proper message.
-  // Thinking of 2 incoming variables - calling function (1 - MCP ON, 2 - MCP OFF, 3 - CommonBus, 4 - Range Enc) and message in int form
+  // procedure to send proper message to RSG Plugin.
+  // 2 incoming variables - calling function (1 - MCP ON, 2 - MCP OFF, 3 - CommonBus, 4 - Range Enc) and message in int form
   // For MCP the pin number with added 0 for SoftKey, 16 for AP and 32 for FMS.
-  // For encoder the encoder code (100-1450)
-
+  // For Common busencoder the encoder code (100-1450)
+  // For Normal encoder direction of rotation (-1 or 1)
 
   switch (Calling) {
-    case 1:
+    case 1: //Push switch
       {
         //Lookup the proper message from array
-
         Serial.write(Button_Commands[Message]);
         //send ON signal and an newline symbol
         Serial.write("=1\n");
       }
       break;
 
-    case 2:
+    case 2: //Release switch
       {
         //Lookup the proper message from array
         Serial.write(Button_Commands[Message]);
@@ -462,11 +449,11 @@ void SEND_SERIAL(int Calling, int Message) {
         Serial.write("=0\n");
       }
       break;
-    case 3:
+    case 3: //Send rotary encoder
       {
-        //Find type of message - Inc = 0, Dec = 1, Sw = 50
+        //Find type of message - Inc = 0, Dec = 1, Switch = 50
         int Type = Message % 100;
-        //Find encoder
+        //Find which encoder was clicked
         int Encod = Message / 100;
         Encod = Encod - 1; // Messages are 0 indexed.
         // Check if encoder is CW for Inc
@@ -477,35 +464,6 @@ void SEND_SERIAL(int Calling, int Message) {
         {
           Type = 1; // if it is CCW for Inc flip it
         }
-        //      //Lookup the proper
-        //      if (Type == 0) {
-        //        //Lookup the proper message from array
-        //        Serial.write(Encoder_Commands_Inc[Encod]);
-        //        //send newline symbol
-        //        Serial.write("\n");
-        //
-        //
-        //
-        //      }
-        //      else if ( Type == 1) {
-        //        //Lookup the proper message from array
-        //        Serial.write(Encoder_Commands_Dec[Encod]);
-        //        //send newline symbol
-        //        Serial.write("\n");
-        //
-        //
-        //
-        //      }
-        //
-        //      else if (Type == 50) {
-        //        //Lookup the proper message from array
-        //        Serial.write(Encoder_Commands_Sw[Encod]);
-        //        //send newline symbol
-        //        Serial.write("\n");
-        //
-        //
-        //
-        //      }
         switch (Type) {
           case 0: //Inc
             //Lookup the proper message from array
@@ -524,7 +482,6 @@ void SEND_SERIAL(int Calling, int Message) {
             Serial.write(Encoder_Commands_Sw[Encod]);
             //send newline symbol
             Serial.write("\n");
-
             break;
         }
       }
@@ -540,16 +497,14 @@ void SEND_SERIAL(int Calling, int Message) {
         }
       }
       break;
-
   }
 }
 
 void PROCESS_ENCODERS() {
   // Proces common bus encoders
-  static int pos = 0;
-  int EncRead = encoders.readAll();
+  int EncRead = encoders.readAll(); //Get updated state
 
-  if (EncRead > 0) {
+  if (EncRead > 0) { //If any encoder clicked, send to PC
     SEND_SERIAL(3, EncRead);
   }
 
@@ -626,24 +581,12 @@ void BUTTONS() {
       }
     }
   }
-
   // Process sending the BTN_PAN_SYNC. I want to send it only if there was no direction pins for at least some time (100ms default)
   if ( (millis() > (SYNC_Triggered_Time + SYNC_Send_Time)) && (Send_SYNC == true)) {
-    SEND_SERIAL((NewValuesFMS[11] + 1), 43); //Send
-    Send_SYNC = false;
+    SEND_SERIAL((NewValuesFMS[11] + 1), 43); //Send the value
+    Send_SYNC = false; //reset the flag
   }
-
-
 }
-
-
-
-
-
-
-
-
-
 
 void loop() {
 
@@ -654,18 +597,15 @@ void loop() {
     Serial.write("\\####RealSimGear#RealSimGear-G1000XFD#1#3.1.9#656E6B776FA39/\n"); // 3.1.9 = latest firmware; 756E6B776Fd39 = RANDOM ID
     Last_Keep_Alive = millis();
   }
-
+  // Make sure to read encoders every loop to avoid missing clicks
   PROCESS_ENCODERS();
-
-  if (millis() % MCP_Update_Time == 0 ) //Do a comparison once per MCP_Update Time. Default: 10ms
+  if (millis() % MCP_Update_Time == 0 ) //Do a comparison once per MCP_Update Time. Default: 50ms. Since we are reading very ralely no debounce needed
   {
     BUTTONS();
   }
 
-
-
-
   // Update backlight switch status
+  // NOT TESTED!
   Backlight.update();
   if (Backlight.fell()) {
     //if backlight switch is 0, switch off the transistor (backlight)
